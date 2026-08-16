@@ -41,3 +41,6 @@ profiles/
 
 # AgentBrowser 익스텐션 빌드 산출물 (zip/압축해제 복사본 — 자동 생성)
 builds/
+
+# Logs (검색 세션 이력 등 민감 로그 제외)
+logs/
