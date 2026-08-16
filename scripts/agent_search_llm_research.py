@@ -45,7 +45,7 @@ if str(PROJECT_ROOT / "src") not in sys.path:
 
 from core.cdp_bridge import BotDetectionError, CDPBridge  # noqa: E402
 from core.humanizer import Humanizer  # noqa: E402
-from core.launcher import CHROME_PATH, build_launch_command, is_chrome_running  # noqa: E402
+from core.launcher import CHROME_PATH  # noqa: E402
 from core.search import SearchConfig, SearchDispatcher  # noqa: E402
 
 logging.basicConfig(

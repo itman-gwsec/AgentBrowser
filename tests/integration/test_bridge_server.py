@@ -22,10 +22,10 @@ from __future__ import annotations
 
 import http.server
 import threading
-from unittest import mock
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
+from unittest import mock
 
 import pytest
 

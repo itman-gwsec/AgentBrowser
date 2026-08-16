@@ -91,9 +91,9 @@ def free_port(port: int) -> None:
         for pid in pids:
             try:
                 subprocess.run(["kill", "-9", pid], check=False, timeout=5)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("kill 실패 pid=%s (무시)", pid)
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.debug("free_port: lsof 실패 (무시)")
     time.sleep(0.5)
 
@@ -120,7 +120,7 @@ def terminate_chrome(proc: subprocess.Popen | None, port: int) -> None:
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     proc.kill()
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("terminate_chrome: 종료 중 예외 (무시)")
     free_port(port)
 
@@ -151,7 +151,7 @@ def hover_some_links(page: Any, humanizer: Humanizer) -> None:
             cy = box["y"] + box["height"] / 2
             page.mouse.move(cx, cy)
             time.sleep(random.uniform(0.1, 0.4))
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.debug("hover 생략 (무시)")
 
 
@@ -182,7 +182,7 @@ def extract_text(page: Any) -> str:
     }"""
     try:
         raw = page.evaluate(js)
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("본문 추출 evaluate 실패")
         raw = ""
     if not isinstance(raw, str):
@@ -190,7 +190,7 @@ def extract_text(page: Any) -> str:
     return raw.strip()[:TEXT_CAP]
 
 
-def fetch_one(rank: int, url: str, title: str, port: int, profile: str) -> dict:  # noqa: ANN401
+def fetch_one(rank: int, url: str, title: str, port: int, profile: str) -> dict:
     """단일 URL 을 실제 브라우저로 방문→본문 수집. 실패해도 호출자로 dict 반환.
 
     Returns:
@@ -242,7 +242,7 @@ def fetch_one(rank: int, url: str, title: str, port: int, profile: str) -> dict:
                 "return captchaIframe || challenge;}"
             ):
                 note = "captcha_wall_detected"
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("[%d] 캡차 스캔 실패 (무시)", rank)
 
         if not raw_text:
@@ -265,14 +265,14 @@ def fetch_one(rank: int, url: str, title: str, port: int, profile: str) -> dict:
             "fetch_status": status,
             "note": note,
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("[%d] 수집 실패: %s — %s", rank, url, exc)
         return _fail(rank, url, title, source, f"{type(exc).__name__}: {exc}")
     finally:
         if bridge is not None:
             try:
                 bridge._safe_disconnect()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("[%d] bridge disconnect 예외 (무시)", rank)
         terminate_chrome(proc, port)
 

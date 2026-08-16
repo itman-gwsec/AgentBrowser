@@ -20,8 +20,9 @@ from pathlib import Path
 ROOT = Path("/Volumes/Data_Vault/ExoCortex/Projects/AgentBrowser")
 sys.path.insert(0, str(ROOT / "src"))
 
-from core.humanizer import Humanizer, HumanizerConfig  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
+
+from core.humanizer import Humanizer, HumanizerConfig  # noqa: E402
 
 RESULT: dict = {
     "target_selector": None,

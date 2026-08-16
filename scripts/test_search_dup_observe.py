@@ -41,7 +41,7 @@ def _read_value(page, selector: str) -> str:
     """검색창의 실제 input.value 를 읽는다 (예외 시 빈 문자열)."""
     try:
         return str(page.input_value(selector))
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("input_value 실패 (selector=%s)", selector)
         return ""
 
@@ -55,7 +55,7 @@ def _captcha_hint(page) -> str:
         markers = ["captcha", "로봇 확인", "unusual traffic", "recaptcha", "vaptcha", "unusual activity"]
         hits = [m for m in markers if m in hay]
         return ";".join(hits)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return ""
 
 
@@ -107,7 +107,7 @@ def main() -> None:
                 "real_typo015": real,
             }
             page.close()
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("[%s] 관찰 실패", name)
             results[name] = {"error": "observe_failed"}
 

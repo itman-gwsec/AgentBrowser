@@ -22,8 +22,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 logger = logging.getLogger("m1_verify")
 
 from core.launcher import is_chrome_running
-from core.session import BrowserSession
 from core.search import SearchConfig, SearchDispatcher
+from core.session import BrowserSession
 
 PORT = 9222
 PROFILE = "m1verify"

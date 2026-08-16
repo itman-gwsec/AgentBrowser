@@ -240,7 +240,7 @@ class Humanizer:
                 / 1000.0
             )
 
-    def type_text_with_typos(  # noqa: PLR0913, PLR0917
+    def type_text_with_typos(
         self,
         page: Any,
         selector: str,

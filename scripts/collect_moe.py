@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import re
 import subprocess
 import sys
 import time
@@ -30,6 +29,8 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+import contextlib
 
 from core.cdp_bridge import BotDetectionError, CDPBridge  # noqa: E402
 from core.humanizer import Humanizer  # noqa: E402
@@ -215,7 +216,7 @@ def fetch_one(url: str, source_type: str, label: str, bridge: CDPBridge,
                     f" [{note}]" if note else "")
         return {"url": url, "source_type": source_type, "label": label,
                 "raw_text": raw_text, "fetch_status": "ok", "note": note}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("수집 실패 %s: %s", url, exc)
         return {"url": url, "source_type": source_type, "label": label,
                 "raw_text": "", "fetch_status": "failed", "note": f"{type(exc).__name__}: {exc}"}
@@ -242,7 +243,7 @@ def main() -> int:
         try:
             bridge.connect()
         except BotDetectionError as exc:
-            logger.error("봇 탐지 차단: %s", exc)
+            logger.exception("봇 탐지 차단: %s", exc)
             return 1
         humanizer = Humanizer()
         results: list[dict] = []
@@ -254,10 +255,8 @@ def main() -> int:
         ok = sum(1 for r in results if r["fetch_status"] == "ok")
         logger.info("완료: %d/%d 성공 → %s", ok, len(results), args.out_path)
     finally:
-        try:
+        with contextlib.suppress(Exception):
             bridge._safe_disconnect()
-        except Exception:
-            pass
         terminate_chrome(proc, args.port)
     return 0
 

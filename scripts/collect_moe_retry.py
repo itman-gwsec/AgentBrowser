@@ -13,11 +13,12 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+import contextlib
 
 from core.cdp_bridge import BotDetectionError, CDPBridge  # noqa: E402
 from core.humanizer import Humanizer  # noqa: E402
@@ -37,10 +38,8 @@ def free_port(port: int) -> None:
     try:
         out = subprocess.run(["lsof", "-ti", f"tcp:{port}"], capture_output=True, text=True, timeout=10).stdout
         for pid in {p.strip() for p in out.split() if p.strip().isdigit()}:
-            try:
+            with contextlib.suppress(Exception):
                 subprocess.run(["kill", "-9", pid], check=False, timeout=5)
-            except Exception:
-                pass
     except Exception:
         pass
     time.sleep(0.5)
@@ -159,7 +158,7 @@ def main() -> int:
         try:
             bridge.connect()
         except BotDetectionError as exc:
-            logger.error("봇 탐지: %s", exc)
+            logger.exception("봇 탐지: %s", exc)
             return 1
         humanizer = Humanizer()
         results = [fetch_one(u, s, l, bridge, humanizer) for (u, s, l) in targets]
@@ -168,10 +167,8 @@ def main() -> int:
         ok = sum(1 for r in results if r["fetch_status"] == "ok")
         logger.info("완료: %d/%d → /tmp/moe_raw_supp.json", ok, len(results))
     finally:
-        try:
+        with contextlib.suppress(Exception):
             bridge._safe_disconnect()
-        except Exception:
-            pass
         terminate_chrome(proc, port)
     return 0
 

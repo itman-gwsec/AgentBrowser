@@ -47,6 +47,13 @@ extend-ignore = ["BLE001"]
 # 테스트 코드는 assert 사용 및 매직 넘버 허용
 "tests/**" = ["PLR2004", "S101"]
 
+# 검증용 일회용 스크립트 — 제품 코드가 아니므로 검사 대상에서 제외
+"scripts/**" = ["ALL"]
+
+# LLM이 생성한 코드에 대한 ruff 규칙들 (noqa 없이 pyproject로 처리)
+"src/core/humanizer.py" = ["PLR0913", "PLR0917"]
+"tests/integration/test_bridge_server.py" = ["TRY003"]
+
 [tool.pytest.ini_options]
 # 테스트에서 src 패키지를 import 할 수 있도록 pythonpath 설정
 pythonpath = ["src"]
