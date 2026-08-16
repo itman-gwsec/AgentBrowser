@@ -1,0 +1,43 @@
+.venv/
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Node / extension build (번들러 사용 시)
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage / test artifacts
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# Logs
+*.log
+
+# Editor
+.vscode/
+.idea/
+
+# AgentBrowser 전용 크롬 프로파일 (로그인/세션 데이터 — 절대 커밋 금지)
+profiles/
+
+# AgentBrowser 익스텐션 빌드 산출물 (zip/압축해제 복사본 — 자동 생성)
+builds/

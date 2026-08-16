@@ -1,0 +1,63 @@
+# AgentBrowser project configuration
+# Config comments may be English/Korean mixed (설정 파일 주석은 영어/한국어 혼용 가능).
+
+[project]
+name = "agentbrowser"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["pydantic>=2", "python-dotenv", "requests>=2.31", "websockets>=15", "playwright>=1.40"]
+
+[project.optional-dependencies]
+dev = ["mypy>=1.8", "pytest-cov>=4.1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+# 라인 길이 100자 (프로젝트 표준)
+line-length = 100
+# Python 3.11 대상
+target-version = "py311"
+# 소스 루트 디렉토리 (src-layout)
+src = ["src"]
+
+[tool.ruff.lint]
+# Strict 선택적 lint 규칙 세트
+select = [
+    "E",    # pycodestyle errors
+    "F",    # Pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "RUF",  # Ruff-specific
+    "TRY",  # tryceratops
+    "DTZ",  # flake8-datetimez
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "PL",   # Pylint
+]
+# 에러 0 목표: 무시 규칙 없음
+ignore = []
+# BLE001(blind except Exception)은 의도적 안전 fallback(broad except for graceful degradation)에서 허용.
+# 그 외 B 규칙은 strict 유지.
+extend-ignore = ["BLE001"]
+
+[tool.ruff.lint.per-file-ignores]
+# 테스트 코드는 assert 사용 및 매직 넘버 허용
+"tests/**" = ["PLR2004", "S101"]
+
+[tool.pytest.ini_options]
+# 테스트에서 src 패키지를 import 할 수 있도록 pythonpath 설정
+pythonpath = ["src"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+# 동일 모듈명(test_bridge_server.py 등)이 tests/unit·tests/integration 에
+# 각각 존재할 때 basename 충돌을 방지하기 위해 경로 기반 고유 모듈명 사용.
+addopts = ["--import-mode=importlib", "--cov=src", "--cov-report=term-missing"]
+
+[tool.mypy]
+# OOP 타입 검증을 위한 strict 모드
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true

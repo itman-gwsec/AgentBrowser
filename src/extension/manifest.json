@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "AgentBrowser",
+  "version": "0.4.0",
+  "description": "인간-에이전트 공유 브라우징 (캡차 위임 배너 UI)",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1:10899/*"],
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_script/content_script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
