@@ -148,11 +148,18 @@ def build_launch_command(
     return args
 
 
-def _pipe_preexec(r_cmd: int, w_evt: int) -> None:
-    """자식 프로세스에서 pipe FD 를 Chrome 이 기대하는 3/4 로 dup 한다.
+def _dup_pipe_to_chrome_fds(r_cmd: int, w_evt: int) -> None:
+    """부모 프로세스에서 pipe 의 양 끝을 Chrome 이 기대하는 FD 3/4 로 dup 한다.
 
-    Chrome ``--remote-debugging-pipe`` 는 FD 3(읽기) / FD 4(쓰기) 를 사용한다.
-    ``preexec_fn`` 에서 부모가 만든 pipe 의 양 끝을 3/4 로 복사한다.
+    macOS 에서 ``--remote-debugging-pipe`` 는 FD 3(명령 읽기) / FD 4(이벤트 쓰기) 를
+    사용한다. 이전에는 ``preexec_fn`` 안에서 dup 했으나, macOS 에선 ``preexec_fn`` 이
+    부모가 물려준 FD 를 자식에 제대로 이어주지 못하는 사례가 있어 Chrome 이
+    ``Remote debugging pipe file descriptors are not open`` (exit 13) 으로 즉시
+    크래시했다.
+
+    해결: 부모에서 미리 FD 3/4 로 ``dup2`` 한 뒤 ``subprocess.Popen(pass_fds=[3, 4])``
+    로 넘긴다. ``pass_fds`` 는 C 수준에서 해당 FD 를 자식에 그대로 상속시키고,
+    ``close_fds=True``(기본) 로 나머지 부모 FD 를 정리하므로 macOS FD 이슈를 우회한다.
     """
     os.dup2(r_cmd, _CDP_PIPE_READ_FD)
     os.dup2(w_evt, _CDP_PIPE_WRITE_FD)
@@ -202,25 +209,41 @@ def spawn_chrome_pipe(
     base_args.append("about:blank")
 
     last_exc: Exception | None = None
-    # Chrome 기동 초기 크래시( exit code 13, "pipe fds not open" 계열)가 드물게
-    # 발생하므로 최대 3회 재시도한다.
+    # macOS FD 이슈(exit 13, "pipe fds not open") 우회: 부모에서 FD 3/4 로 dup2 한 뒤
+    # pass_fds=[3,4] 로 상속. 드물게 초기 크래시하면 최대 3회 재시도한다.
     for _attempt in range(3):
         r_cmd, w_cmd = os.pipe()   # r_cmd: Chrome 이 읽음 / w_cmd: 부모가 씀
         r_evt, w_evt = os.pipe()   # r_evt: 부모가 읽음 / w_evt: Chrome 이 씀
+
+        # 예약 fd(3/4) 충돌 회피: 부모가 계속 쓸 write/read fd(w_cmd, r_evt) 가
+        # 우연히 3/4 에 있으면 dup2 가 덮어써서 부모 핸들이 꼬인다. 미리 높은 fd 로 옮긴다.
+        if w_cmd in (_CDP_PIPE_READ_FD, _CDP_PIPE_WRITE_FD):
+            _new = os.dup(w_cmd)
+            os.close(w_cmd)
+            w_cmd = _new
+        if r_evt in (_CDP_PIPE_READ_FD, _CDP_PIPE_WRITE_FD):
+            _new = os.dup(r_evt)
+            os.close(r_evt)
+            r_evt = _new
+
+        # 부모에서 FD 3/4 로 미리 dup → Chrome 이 기대하는 위치에 pipe 를 놓는다.
+        # (r_cmd/w_evt 가 이미 3/4 인 경우 dup2 는 no-op)
+        os.dup2(r_cmd, _CDP_PIPE_READ_FD)
+        os.dup2(w_evt, _CDP_PIPE_WRITE_FD)
         try:
             proc = subprocess.Popen(
                 base_args,
-                preexec_fn=lambda r_cmd=r_cmd, w_evt=w_evt: _pipe_preexec(r_cmd, w_evt),  # noqa: PLW1509
-                # close_fds=False: 부모가 만든 pipe FD(3/4) 를 자식이 물려받음.
-                close_fds=False,
-                # 자식은 FD 3/4 외의 부모 fd(터미널 등)를 그대로 이어받아도 무방.
+                # pass_fds: C 수준에서 FD 3/4 를 자식에 그대로 상속시킨다.
+                # close_fds=True(기본) 로 나머지 부모 FD 를 정리 → macOS FD 누수/초기화
+                # 이슈를 근본 우회. (preexec_fn + close_fds=False 조합은 미사용)
+                pass_fds=[_CDP_PIPE_READ_FD, _CDP_PIPE_WRITE_FD],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
         except OSError as exc:  # pragma: no cover - 기동 자체 실패(권한/경로)
             last_exc = exc
-            for fd in (r_cmd, w_cmd, r_evt, w_evt):
+            for fd in (r_cmd, w_cmd, r_evt, w_evt, _CDP_PIPE_READ_FD, _CDP_PIPE_WRITE_FD):
                 with contextlib.suppress(OSError):
                     os.close(fd)
             continue
@@ -230,13 +253,21 @@ def spawn_chrome_pipe(
         if proc.poll() is None:
             # 성공: 부모가 사용할 write/read FD 반환.
             # w_cmd 는 부모가 CDP 명령을 쓰는 FD, r_evt 는 부모가 이벤트를 읽는 FD.
+            # dup2 로 만든 FD 3/4 는 부모 입장에선 여분(반대편)이므로 정리한다.
+            # (원본 r_cmd/w_evt 가 3/4 와 겹치지 않도록 보관 fd 는 제외하고 닫음)
+            _to_close = {r_cmd, w_evt, _CDP_PIPE_READ_FD, _CDP_PIPE_WRITE_FD}
+            _to_close.discard(w_cmd)
+            _to_close.discard(r_evt)
+            for fd in _to_close:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
             return proc, w_cmd, r_evt
         # 즉시 죽은 경우 정리 후 재시도.
         with contextlib.suppress(OSError):
             proc.kill()
         with contextlib.suppress(subprocess.TimeoutExpired):
             proc.wait(timeout=3)
-        for fd in (r_cmd, w_cmd, r_evt, w_evt):
+        for fd in (r_cmd, w_cmd, r_evt, w_evt, _CDP_PIPE_READ_FD, _CDP_PIPE_WRITE_FD):
             with contextlib.suppress(OSError):
                 os.close(fd)
         last_exc = RuntimeError(f"Chrome pipe spawn failed (exit={proc.returncode})")
