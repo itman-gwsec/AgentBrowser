@@ -1,0 +1,23 @@
+# Docker 빌드 컨텍스트에서 제외할 경로
+# (불필요한 복사 방지 + 캐시/로컬 상태 누수 차단)
+
+.git
+.gitignore
+.venv
+.venv/
+.coverage
+.pytest_cache
+.ruff_cache
+.mypy_cache
+__pycache__
+*.pyc
+profiles
+profiles/
+memory
+memory/
+logs
+logs/
+builds
+builds/
+*.egg-info
+.DS_Store

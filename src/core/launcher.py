@@ -39,8 +39,19 @@ import subprocess
 import time
 from pathlib import Path
 
-# macOS 실제 Chrome 바이너리 경로 (헤드리스가 아닌 헤드풀 기동).
-CHROME_PATH: str = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+from core.fingerprint import (
+    Fingerprint,
+    build_fingerprint_from_env,
+    fingerprint_to_chrome_flags,
+    fingerprint_to_js_overrides,
+)
+
+# 실제 Chrome 바이너리 경로 (헤드리스가 아닌 헤드풀 기동).
+# 컨테이너(Linux)에서는 CHROME_BIN env 로 재정의 (예: /usr/bin/google-chrome-stable).
+# 미지정 시 macOS 로컬 기동 기본값.
+CHROME_PATH: str = os.environ.get(
+    "CHROME_BIN", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+)
 
 # 이 모듈 파일 기준 프로젝트 루트: src/core/launcher.py → parents[2] = 프로젝트 루트.
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
@@ -75,6 +86,26 @@ def _profile_dir(profile_name: str) -> Path:
     return PROJECT_ROOT / "profiles" / profile_name
 
 
+def build_fingerprint_bundle(
+    env: dict | None = None, container_index: int | None = None
+) -> tuple[list[str], str]:
+    """환경변수 주입 지문을 (Chrome 플래그, JS override) 번들로 반환한다 (M6).
+
+    docker-compose 에서 주입한 ``CHROME_*`` env 를 읽어, Chrome 실행 플래그와
+    ``navigator`` JS override 스크립트를 함께 만든다. 컨테이너별 drift 는
+    ``container_index``(또는 ``CHROME_CONTAINER_INDEX`` env) 기반으로 결정적 적용.
+
+    Args:
+        env: 환경변수 dict (테스트 주입용). None 이면 ``os.environ`` 사용.
+        container_index: 컨테이너 인덱스. None 이면 env 에서 파생.
+
+    Returns:
+        ``(chrome_flags, js_override)`` 튜플.
+    """
+    fp = build_fingerprint_from_env(env=env, container_index=container_index)
+    return fingerprint_to_chrome_flags(fp), fingerprint_to_js_overrides(fp)
+
+
 def is_chrome_running(profile_name: str = "default", port: int = 9222) -> bool:
     """지정 프로파일로 떠있는 Chrome 프로세스가 있는지 확인한다 (포트 미사용).
 
@@ -107,6 +138,7 @@ def is_chrome_running(profile_name: str = "default", port: int = 9222) -> bool:
 def build_launch_command(
     profile_name: str = "default",
     extension_dir: str = "src/extension",
+    fingerprint: Fingerprint | None = None,
 ) -> list[str]:
     """봇 탐지 플래그 없이 headed Chrome 을 기동하는 명령줄을 반환한다.
 
@@ -116,9 +148,14 @@ def build_launch_command(
     반환된 명령줄은 인간(또는 별도 스크립트)이 직접 실행해야 한다 — 이 함수는
     실행하지 않는다. (pipe 전용 spawn 이 필요하면 ``spawn_chrome_pipe`` 사용)
 
+    M6: ``fingerprint`` 가 None 이면 환경변수에서 지문을 자동 구성하여, GPU/디스플레이
+    지문 주입 플래그(``--use-gl``/``--use-angle``/``--force-device-scale-factor``/
+    ``--window-size``)를 명령줄에 반영한다.
+
     Args:
         profile_name: ``profiles/<name>`` 형태로 사용할 전용 프로파일 이름.
         extension_dir: 프로젝트 루트 기준 익스텐션 디렉터리 경로(상대경로).
+        fingerprint: 지문 설정. None 이면 env 에서 자동 구성(build_fingerprint_from_env).
 
     Returns:
         실행 가능한 명령줄 인자 리스트 (``subprocess`` 호환).
@@ -131,6 +168,9 @@ def build_launch_command(
             f"Chrome 바이너리를 찾을 수 없습니다: {CHROME_PATH}"
         )
 
+    if fingerprint is None:
+        fingerprint = build_fingerprint_from_env()
+
     extension_path: Path = (PROJECT_ROOT / extension_dir).resolve()
     args: list[str] = [
         CHROME_PATH,
@@ -141,6 +181,8 @@ def build_launch_command(
         # ⚠ 금지: "--enable-automation" 은 절대 추가하지 않는다 (R2 봇회피).
         "--no-first-run",
         "--no-default-browser-check",
+        # M6: 환경변수 주입 GPU/디스플레이 지문 플래그.
+        *fingerprint_to_chrome_flags(fingerprint),
         # 포커스/백그라운드 격리 (사용자 작업과 겹치지 않게).
         *_FOCUS_ISOLATION_FLAGS,
         "about:blank",
@@ -170,17 +212,23 @@ def spawn_chrome_pipe(
     extension_dir: str = "src/extension",
     headless: bool = False,
     extra_args: list[str] | None = None,
+    fingerprint: Fingerprint | None = None,
 ) -> tuple[subprocess.Popen, int, int]:
     """pipe 모드로 Chrome 을 spawn 하고 (write_fd, read_fd) 를 반환한다.
 
     TCP 포트를 열지 않으므로 macOS 방화벽 프롬프트가 없다. 반환된 FD 는
     호출자(보통 cdp_bridge 의 WS 브리지)가 CDP 메시지를 주고받는 데 사용한다.
 
+    M6: ``fingerprint`` 가 None 이면 환경변수에서 지문을 자동 구성하여, GPU/디스플레이
+    지문 주입 플래그를 기동 인자에 반영한다 (JS override 는 호출자가
+    ``build_fingerprint_bundle`` 로 얻어 CDP 주입).
+
     Args:
         profile_name: 전용 프로파일 이름.
         extension_dir: 익스텐션 디렉터리(프로젝트 루트 기준 상대경로).
         headless: 헤드리스 기동 여부 (기본 False = headed 실제 크롬, R1).
         extra_args: 추가 Chrome 인자.
+        fingerprint: 지문 설정. None 이면 env 에서 자동 구성.
 
     Returns:
         ``(proc, write_fd, read_fd)`` — write_fd 는 부모가 CDP 명령을 쓰는 FD,
@@ -192,6 +240,9 @@ def spawn_chrome_pipe(
     if not os.path.exists(CHROME_PATH):
         raise FileNotFoundError(f"Chrome 바이너리가 없습니다: {CHROME_PATH}")  # noqa: TRY003
 
+    if fingerprint is None:
+        fingerprint = build_fingerprint_from_env()
+
     extension_path: Path = (PROJECT_ROOT / extension_dir).resolve()
     base_args: list[str] = [
         CHROME_PATH,
@@ -200,6 +251,8 @@ def spawn_chrome_pipe(
         f"--load-extension={extension_path}",
         "--no-first-run",
         "--no-default-browser-check",
+        # M6: 환경변수 주입 GPU/디스플레이 지문 플래그.
+        *fingerprint_to_chrome_flags(fingerprint),
         *_FOCUS_ISOLATION_FLAGS,
     ]
     if headless:
