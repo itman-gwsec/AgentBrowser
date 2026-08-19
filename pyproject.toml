@@ -14,6 +14,10 @@ dev = ["mypy>=1.8", "pytest-cov>=4.1"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+# src-layout: src/ 아래 모든 패키지를 wheel 에 포함.
+packages = ["src/core", "src/agent"]
+
 [tool.ruff]
 # 라인 길이 100자 (프로젝트 표준)
 line-length = 100
