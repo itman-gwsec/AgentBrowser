@@ -44,3 +44,11 @@ builds/
 
 # Logs (검색 세션 이력 등 민감 로그 제외)
 logs/
+
+# 일회성 탐색·디버그 스크립트 (보존은 하되 커밋 금지)
+scripts/_oneoff/
+scripts/js/
+
+# 루트 진단 스크린샷
+/diag_*.png
+/zt_*.png
