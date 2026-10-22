@@ -258,10 +258,26 @@ class CDPBridge:
         self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
 
         # ── 봇 탐지 사전 검증 (R2) ──
-        try:
-            webdriver_flag = self.page.evaluate("() => navigator.webdriver === true")
-        except Exception:
-            logger.exception("navigator.webdriver 평가 실패 — 보수적 차단")
+        # SPA 재사용 탭이 전환 중일 수 있으므로 컨텍스트 파괴는 재시도한다.
+        webdriver_flag = None
+        for _attempt in range(6):
+            with contextlib.suppress(Exception):
+                self.page.wait_for_load_state("load", timeout=10_000)
+            try:
+                webdriver_flag = self.page.evaluate("() => navigator.webdriver === true")
+                break
+            except Exception as _e:
+                _msg = str(_e)
+                _retryable = ("context was destroyed" in _msg or "Execution context" in _msg
+                              or "navigating" in _msg)
+                if _retryable:
+                    time.sleep(1.0)
+                    continue
+                logger.exception("navigator.webdriver 평가 실패 — 보수적 차단")
+                self._safe_disconnect()
+                raise BotDetectionError(_BOT_DETECT_UNKNOWN_MSG) from None
+        if webdriver_flag is None:
+            logger.exception("navigator.webdriver 평가 반복 실패 — 보수적 차단")
             self._safe_disconnect()
             raise BotDetectionError(_BOT_DETECT_UNKNOWN_MSG) from None
 
